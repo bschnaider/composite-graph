@@ -235,11 +235,13 @@
         // Set default end date to today
         document.getElementById('end-date').value = new Date().toISOString().split('T')[0];
 
-        // CORS proxies to try (in order)
+        // CORS proxies to try (in order) - some work better with GitHub Pages
         const CORS_PROXIES = [
             (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
             (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-            (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+            (url) => `https://proxy.cors.sh/${url}`,
+            (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+            (url) => `https://thingproxy.freeboard.io/fetch/${url}`
         ];
 
         // Fetch real data from Yahoo Finance
@@ -254,18 +256,40 @@
             const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=1d`;
 
             // Try each proxy until one works
-            for (const proxyFn of CORS_PROXIES) {
+            for (let i = 0; i < CORS_PROXIES.length; i++) {
+                const proxyFn = CORS_PROXIES[i];
                 try {
                     const url = proxyFn(yahooUrl);
+                    console.log(`Trying proxy ${i + 1}/${CORS_PROXIES.length} for ${symbol}...`);
+
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
                     const response = await fetch(url, {
-                        signal: AbortSignal.timeout(10000) // 10 second timeout
+                        signal: controller.signal,
+                        headers: {
+                            'Accept': 'application/json',
+                        }
                     });
 
-                    if (!response.ok) continue;
+                    clearTimeout(timeoutId);
 
-                    const data = await response.json();
+                    if (!response.ok) {
+                        console.log(`Proxy ${i + 1} returned status ${response.status}`);
+                        continue;
+                    }
+
+                    const text = await response.text();
+                    let data;
+                    try {
+                        data = JSON.parse(text);
+                    } catch (e) {
+                        console.log(`Proxy ${i + 1} returned invalid JSON`);
+                        continue;
+                    }
 
                     if (!data.chart || !data.chart.result || !data.chart.result[0]) {
+                        console.log(`Proxy ${i + 1} returned unexpected data structure`);
                         continue;
                     }
 
@@ -273,28 +297,31 @@
                     const timestamps = result.timestamp;
                     const closes = result.indicators?.quote?.[0]?.close;
 
-                    if (!timestamps || !closes) continue;
+                    if (!timestamps || !closes) {
+                        console.log(`Proxy ${i + 1} missing timestamp or close data`);
+                        continue;
+                    }
 
                     const prices = [];
-                    for (let i = 0; i < timestamps.length; i++) {
-                        if (closes[i] !== null && closes[i] !== undefined) {
-                            const date = new Date(timestamps[i] * 1000).toISOString().split('T')[0];
-                            prices.push({ date, price: closes[i] });
+                    for (let j = 0; j < timestamps.length; j++) {
+                        if (closes[j] !== null && closes[j] !== undefined) {
+                            const date = new Date(timestamps[j] * 1000).toISOString().split('T')[0];
+                            prices.push({ date, price: closes[j] });
                         }
                     }
 
                     if (prices.length > 0) {
                         cachedRealData[cacheKey] = prices;
-                        console.log(`Fetched ${symbol} via proxy`);
+                        console.log(`✓ Fetched ${symbol} via proxy ${i + 1} (${prices.length} data points)`);
                         return prices;
                     }
                 } catch (error) {
-                    console.log(`Proxy failed for ${symbol}, trying next...`);
+                    console.log(`Proxy ${i + 1} failed for ${symbol}: ${error.message}`);
                     continue;
                 }
             }
 
-            console.error(`All proxies failed for ${symbol}`);
+            console.error(`All ${CORS_PROXIES.length} proxies failed for ${symbol}`);
             return null;
         }
 
@@ -496,8 +523,11 @@
             const symbols = selectedEquities.map(e => e.symbol);
 
             // Try to fetch real data first
-            let rawData = await fetchAllRealData(symbols, startDate, endDate);
             const footer = document.getElementById('data-source-footer');
+            footer.innerHTML = '⏳ Fetching real market data from Yahoo Finance...';
+            footer.style.color = '#888';
+
+            let rawData = await fetchAllRealData(symbols, startDate, endDate);
 
             if (rawData && rawData.length > 0) {
                 usingRealData = true;
