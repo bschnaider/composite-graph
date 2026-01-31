@@ -330,32 +330,73 @@
                 symbols.map(sym => fetchRealData(sym, startDate, endDate))
             );
 
-            // Check if all fetches succeeded
-            if (results.some(r => r === null || r.length === 0)) {
-                return null;
+            // Track which symbols succeeded and which failed
+            const successfulSymbols = [];
+            const failedSymbols = [];
+
+            symbols.forEach((sym, idx) => {
+                if (results[idx] && results[idx].length > 0) {
+                    successfulSymbols.push(sym);
+                } else {
+                    failedSymbols.push(sym);
+                }
+            });
+
+            // If all failed, return null to use full simulation
+            if (successfulSymbols.length === 0) {
+                return { data: null, failedSymbols: symbols };
             }
 
-            // Merge all data by date, normalizing to 0% from start
+            // Merge all real data by date, normalizing to 0% from start
             const dateMap = {};
             const startPrices = {};
 
             symbols.forEach((sym, idx) => {
                 const prices = results[idx];
-                if (prices.length > 0) {
+                if (prices && prices.length > 0) {
                     startPrices[sym] = prices[0].price;
+                    prices.forEach(p => {
+                        if (!dateMap[p.date]) {
+                            dateMap[p.date] = { date: p.date };
+                        }
+                        // Calculate % change from start
+                        const pctChange = ((p.price / startPrices[sym]) - 1) * 100;
+                        dateMap[p.date][sym] = Math.round(pctChange * 100) / 100;
+                    });
                 }
-                prices.forEach(p => {
-                    if (!dateMap[p.date]) {
-                        dateMap[p.date] = { date: p.date };
-                    }
-                    // Calculate % change from start
-                    const pctChange = ((p.price / startPrices[sym]) - 1) * 100;
-                    dateMap[p.date][sym] = Math.round(pctChange * 100) / 100;
-                });
             });
 
             // Convert to sorted array
-            return Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
+            const data = Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
+
+            // For failed symbols, generate simulated data aligned with the same dates
+            if (failedSymbols.length > 0 && data.length > 0) {
+                const baseValues = {};
+                const startPricesSimulated = {};
+                failedSymbols.forEach(sym => {
+                    baseValues[sym] = 100;
+                    startPricesSimulated[sym] = 100;
+                });
+
+                data.forEach((point, i) => {
+                    if (i === 0) {
+                        failedSymbols.forEach(sym => {
+                            point[sym] = 0;
+                        });
+                    } else {
+                        const marketMove = (Math.random() - 0.5) * 0.01;
+                        failedSymbols.forEach(sym => {
+                            const volatility = 0.02;
+                            const trend = 0.0004;
+                            const change = marketMove * 0.5 + (Math.random() - 0.5) * volatility + trend;
+                            baseValues[sym] *= (1 + change);
+                            point[sym] = Math.round((baseValues[sym] / startPricesSimulated[sym] - 1) * 10000) / 100;
+                        });
+                    }
+                });
+            }
+
+            return { data, failedSymbols };
         }
 
         function generateRealisticData(symbols, startDate, endDate) {
@@ -527,17 +568,25 @@
             footer.innerHTML = '⏳ Fetching real market data from Yahoo Finance...';
             footer.style.color = '#888';
 
-            let rawData = await fetchAllRealData(symbols, startDate, endDate);
+            const result = await fetchAllRealData(symbols, startDate, endDate);
+            let rawData;
 
-            if (rawData && rawData.length > 0) {
-                usingRealData = true;
-                footer.innerHTML = '✅ Using <strong>real market data</strong> from Yahoo Finance';
-                footer.style.color = '#4ecdc4';
+            if (result.data && result.data.length > 0) {
+                rawData = result.data;
+                if (result.failedSymbols.length === 0) {
+                    usingRealData = true;
+                    footer.innerHTML = '✅ Using <strong>real market data</strong> from Yahoo Finance';
+                    footer.style.color = '#4ecdc4';
+                } else {
+                    usingRealData = true;
+                    footer.innerHTML = `✅ Real data loaded • ⚠️ Simulated: <strong>${result.failedSymbols.join(', ')}</strong> (proxy blocked)`;
+                    footer.style.color = '#ffe66d';
+                }
             } else {
                 usingRealData = false;
                 rawData = generateRealisticData(symbols, startDate, endDate);
-                footer.innerHTML = '⚠️ Using <strong>simulated data</strong> (real data unavailable - check symbol or try again)';
-                footer.style.color = '#ffe66d';
+                footer.innerHTML = '⚠️ Using <strong>simulated data</strong> (all proxies failed - try again later)';
+                footer.style.color = '#ff6b6b';
             }
 
             document.getElementById('days-count').textContent = `${rawData.length} trading days`;
