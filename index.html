@@ -235,6 +235,13 @@
         // Set default end date to today
         document.getElementById('end-date').value = new Date().toISOString().split('T')[0];
 
+        // CORS proxies to try (in order)
+        const CORS_PROXIES = [
+            (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+            (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+            (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+        ];
+
         // Fetch real data from Yahoo Finance
         async function fetchRealData(symbol, startDate, endDate) {
             const cacheKey = `${symbol}_${startDate}_${endDate}`;
@@ -242,35 +249,53 @@
                 return cachedRealData[cacheKey];
             }
 
-            try {
-                const start = Math.floor(new Date(startDate).getTime() / 1000);
-                const end = Math.floor(new Date(endDate).getTime() / 1000) + 86400;
+            const start = Math.floor(new Date(startDate).getTime() / 1000);
+            const end = Math.floor(new Date(endDate).getTime() / 1000) + 86400;
+            const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=1d`;
 
-                // Use a CORS proxy to access Yahoo Finance
-                const url = `https://corsproxy.io/?https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=1d`;
+            // Try each proxy until one works
+            for (const proxyFn of CORS_PROXIES) {
+                try {
+                    const url = proxyFn(yahooUrl);
+                    const response = await fetch(url, {
+                        signal: AbortSignal.timeout(10000) // 10 second timeout
+                    });
 
-                const response = await fetch(url);
-                if (!response.ok) throw new Error('Network response was not ok');
+                    if (!response.ok) continue;
 
-                const data = await response.json();
-                const result = data.chart.result[0];
-                const timestamps = result.timestamp;
-                const closes = result.indicators.quote[0].close;
+                    const data = await response.json();
 
-                const prices = [];
-                for (let i = 0; i < timestamps.length; i++) {
-                    if (closes[i] !== null) {
-                        const date = new Date(timestamps[i] * 1000).toISOString().split('T')[0];
-                        prices.push({ date, price: closes[i] });
+                    if (!data.chart || !data.chart.result || !data.chart.result[0]) {
+                        continue;
                     }
-                }
 
-                cachedRealData[cacheKey] = prices;
-                return prices;
-            } catch (error) {
-                console.error(`Failed to fetch ${symbol}:`, error);
-                return null;
+                    const result = data.chart.result[0];
+                    const timestamps = result.timestamp;
+                    const closes = result.indicators?.quote?.[0]?.close;
+
+                    if (!timestamps || !closes) continue;
+
+                    const prices = [];
+                    for (let i = 0; i < timestamps.length; i++) {
+                        if (closes[i] !== null && closes[i] !== undefined) {
+                            const date = new Date(timestamps[i] * 1000).toISOString().split('T')[0];
+                            prices.push({ date, price: closes[i] });
+                        }
+                    }
+
+                    if (prices.length > 0) {
+                        cachedRealData[cacheKey] = prices;
+                        console.log(`Fetched ${symbol} via proxy`);
+                        return prices;
+                    }
+                } catch (error) {
+                    console.log(`Proxy failed for ${symbol}, trying next...`);
+                    continue;
+                }
             }
+
+            console.error(`All proxies failed for ${symbol}`);
+            return null;
         }
 
         async function fetchAllRealData(symbols, startDate, endDate) {

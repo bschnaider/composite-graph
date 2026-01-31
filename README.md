@@ -1,71 +1,44 @@
 # Composite Equity Performance Graph
 
-An interactive web app to visualize weighted portfolio performance of up to 5 stocks/ETFs.
+An interactive web app to visualize weighted portfolio performance of stocks and ETFs with real-time data from Yahoo Finance.
 
 ## Features
 
-- **Select up to 5 equities** from a dropdown of popular stocks and ETFs
-- **Adjust weights** for each equity (default: equal weight)
-- **Custom date range** (default: Jan 1, 2025 to today)
-- **Normalized performance** - all equities start at 100 for easy comparison
-- **Composite line** - shows weighted average performance
-- **Period returns** - displays % gain/loss for each equity
+- **Up to 10 equities** - Select from popular stocks/ETFs or enter any custom symbol
+- **Proportional weights** - Enter any numbers (1, 2, 3 or 50, 100, 200) - automatically scales to 100%
+- **Real-time data** - Fetches live prices from Yahoo Finance
+- **Custom date range** - Default: Jan 1, 2025 to today
+- **0% baseline** - All equities start at 0% for easy comparison
+- **Composite line** - Shows weighted average performance (dashed white line)
+- **Period returns** - Displays % gain/loss for each equity
 
 ## Quick Start
 
-### Option 1: Open directly (uses simulated data)
-Simply open `app.html` in your web browser. It will use realistic simulated data.
+Simply open `index.html` in your web browser. The app will automatically fetch real market data from Yahoo Finance.
 
-### Option 2: Use real Yahoo Finance data
-1. Install dependencies:
-   ```bash
-   pip install yfinance pandas
-   ```
-
-2. Fetch real stock data:
-   ```bash
-   python fetch_data.py
-   ```
-   This creates `stock_data.json` with real market data.
-
-3. Start a local server:
-   ```bash
-   python -m http.server 8000
-   ```
-
-4. Open in browser:
-   ```
-   http://localhost:8000/app.html
-   ```
-
-## Customizing Data Fetch
-
-```bash
-# Custom symbols
-python fetch_data.py --symbols SPY QQQ AAPL GOOGL AMZN
-
-# Custom date range
-python fetch_data.py --start 2024-06-01 --end 2024-12-31
-
-# Custom weights
-python fetch_data.py --symbols SPY QQQ --weights 60 40
-
-# Save to different file
-python fetch_data.py --output my_portfolio.json
-```
+**Note:** If real data fails to load (network issues, invalid symbol), the app falls back to simulated data and shows a warning.
 
 ## Files
 
 | File | Description |
 |------|-------------|
-| `app.html` | Main web app - opens in any browser |
-| `index.html` | Alternate version (standalone demo) |
-| `fetch_data.py` | Python script to get real Yahoo Finance data |
-| `stock_data.json` | Generated data file (after running fetch_data.py) |
+| `index.html` | Main web app (use this for GitHub Pages) |
+| `app.html` | Development version |
+| `fetch_data.py` | Python script for local data fetching (optional) |
+| `README.md` | This documentation |
+
+## How Weights Work
+
+Enter any proportional numbers - the app auto-calculates percentages:
+
+| You Enter | Calculated Weight |
+|-----------|-------------------|
+| 1, 1, 1 | 33.3%, 33.3%, 33.3% |
+| 2, 1, 1 | 50%, 25%, 25% |
+| 3, 2, 1 | 50%, 33.3%, 16.7% |
+| 100, 50, 50 | 50%, 25%, 25% |
 
 ## Available Equities
-
-The app includes 25+ popular stocks and ETFs:
 
 **ETFs:** SPY, QQQ, DIA, IWM, VTI
 
@@ -79,15 +52,29 @@ The app includes 25+ popular stocks and ETFs:
 
 **Energy:** XOM
 
-## How It Works
+**Custom:** Type any valid stock symbol in the input field
 
-1. **Normalization**: Each equity's price is converted to start at 100 on the first date
-2. **Weighting**: The composite is calculated as the weighted average of normalized prices
-3. **Visualization**: Recharts renders an interactive line chart with tooltips and legend
+## Deploy to GitHub Pages
+
+1. Create a new repository on GitHub
+2. Upload `index.html` and `README.md`
+3. Go to Settings → Pages → Deploy from main branch
+4. Your app will be live at `https://YOUR-USERNAME.github.io/REPO-NAME/`
 
 ## Tech Stack
 
-- React 18 (via CDN)
-- Recharts (charting library)
-- yfinance (Python, for real data)
-- Pure HTML/CSS (no build step required)
+- Chart.js 4.4 (charting)
+- Yahoo Finance API (real-time data via CORS proxy)
+- Pure HTML/CSS/JavaScript (no build step)
+
+## Troubleshooting
+
+**"Using simulated data" warning?**
+- Check if the stock symbol is valid
+- The CORS proxy may be temporarily down - try refreshing
+- Some symbols (especially non-US) may not be available
+
+**Chart not loading?**
+- Ensure you have an internet connection
+- Try a different browser
+- Check browser console for errors
