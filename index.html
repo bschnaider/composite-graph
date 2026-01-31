@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Composite Equity Performance Graph</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header {
+            text-align: center;
+            margin-bottom: 25px;
+            background: rgba(255,255,255,0.03);
+            padding: 25px;
+            border-radius: 16px;
+        }
+        .title { font-size: 32px; font-weight: 700; color: #00d4ff; margin-bottom: 8px; }
+        .subtitle { color: #666; font-size: 14px; }
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+        .card {
+            background: rgba(255,255,255,0.03);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .card-title { font-size: 15px; font-weight: 600; margin-bottom: 15px; color: #fff; }
+        .equity-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+            padding: 12px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+        }
+        .color-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        select, input[type="number"], input[type="date"] {
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.15);
+            background: rgba(0,0,0,0.4);
+            color: #fff;
+            font-size: 14px;
+        }
+        select { flex: 1; cursor: pointer; }
+        input[type="number"] { width: 65px; text-align: center; font-weight: 600; }
+        input[type="date"] { width: 100%; margin-bottom: 12px; }
+        .remove-btn {
+            padding: 8px 12px;
+            background: rgba(255,100,100,0.15);
+            border: 1px solid rgba(255,100,100,0.25);
+            border-radius: 8px;
+            color: #ff6b6b;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .remove-btn:hover { background: rgba(255,100,100,0.25); }
+        .btn {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+            border: none;
+            border-radius: 10px;
+            color: #fff;
+            cursor: pointer;
+            font-weight: 600;
+            margin-right: 10px;
+            margin-top: 12px;
+        }
+        .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(0,212,255,0.4); }
+        .btn-secondary {
+            padding: 12px 24px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 10px;
+            color: #fff;
+            cursor: pointer;
+            margin-top: 12px;
+        }
+        .btn-secondary:hover { background: rgba(255,255,255,0.12); }
+        .total-weight {
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            margin-top: 12px;
+            font-weight: 600;
+        }
+        .total-ok { background: rgba(78,205,196,0.15); border: 1px solid rgba(78,205,196,0.3); color: #4ecdc4; }
+        .total-bad { background: rgba(255,107,107,0.15); border: 1px solid rgba(255,107,107,0.3); color: #ff6b6b; }
+        .label { display: block; margin-bottom: 6px; color: #888; font-size: 12px; font-weight: 500; }
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 15px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .checkbox-label input { width: 18px; height: 18px; }
+        .chart-container {
+            background: rgba(255,255,255,0.03);
+            border-radius: 16px;
+            padding: 25px;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .stats-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px; }
+        .stat-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .stat-positive { background: rgba(78,205,196,0.15); color: #4ecdc4; }
+        .stat-negative { background: rgba(255,107,107,0.15); color: #ff6b6b; }
+        .footer {
+            text-align: center;
+            padding: 15px;
+            margin-top: 20px;
+            color: #555;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">📈 Composite Equity Performance</h1>
+            <p class="subtitle">Build and visualize a weighted portfolio of up to 10 equities • All starting from 0%</p>
+        </div>
+
+        <div class="controls">
+            <div class="card">
+                <h3 class="card-title">🎯 Select Equities & Weights <span style="font-size:11px;color:#888;font-weight:normal">(enter any numbers - auto-scales to 100%)</span></h3>
+                <div style="display:flex;gap:8px;margin-bottom:12px">
+                    <input type="text" id="custom-symbol" placeholder="Enter symbol (e.g. GOOG)"
+                           style="flex:1;text-transform:uppercase"
+                           onkeypress="if(event.key==='Enter')addCustomSymbol()">
+                    <button class="btn" style="margin:0;padding:10px 16px" onclick="addCustomSymbol()">Add</button>
+                </div>
+                <div id="equities-container"></div>
+                <div id="total-weight" class="total-weight total-ok">Total: 100%</div>
+                <div>
+                    <button class="btn" id="add-btn" onclick="addEquity()">+ Add Equity</button>
+                    <button class="btn-secondary" onclick="equalizeWeights()">Equal Weights</button>
+                </div>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="show-composite" checked onchange="updateChart()">
+                    <span>Show Composite Line (weighted average)</span>
+                </label>
+            </div>
+
+            <div class="card">
+                <h3 class="card-title">📅 Date Range</h3>
+                <label class="label">Start Date</label>
+                <input type="date" id="start-date" value="2025-01-01" onchange="updateChart()">
+                <label class="label">End Date</label>
+                <input type="date" id="end-date" onchange="updateChart()">
+                <div id="stats-container" class="stats-container"></div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <h3 class="card-title">📊 Performance Chart <span id="days-count" style="font-size:12px;color:#666;font-weight:normal;margin-left:10px"></span></h3>
+            <canvas id="chart"></canvas>
+        </div>
+
+        <div class="footer" id="data-source-footer">
+            📊 Loading real market data from Yahoo Finance...
+        </div>
+    </div>
+
+    <script>
+        const AVAILABLE_EQUITIES = [
+            { symbol: 'SPY', name: 'S&P 500 ETF' },
+            { symbol: 'QQQ', name: 'Nasdaq 100 ETF' },
+            { symbol: 'DIA', name: 'Dow Jones ETF' },
+            { symbol: 'IWM', name: 'Russell 2000 ETF' },
+            { symbol: 'VTI', name: 'Total Stock Market ETF' },
+            { symbol: 'AAPL', name: 'Apple Inc.' },
+            { symbol: 'MSFT', name: 'Microsoft Corp.' },
+            { symbol: 'GOOGL', name: 'Alphabet Inc.' },
+            { symbol: 'AMZN', name: 'Amazon.com Inc.' },
+            { symbol: 'NVDA', name: 'NVIDIA Corp.' },
+            { symbol: 'META', name: 'Meta Platforms' },
+            { symbol: 'TSLA', name: 'Tesla Inc.' },
+            { symbol: 'BRK-B', name: 'Berkshire Hathaway' },
+            { symbol: 'JPM', name: 'JPMorgan Chase' },
+            { symbol: 'V', name: 'Visa Inc.' },
+            { symbol: 'JNJ', name: 'Johnson & Johnson' },
+            { symbol: 'UNH', name: 'UnitedHealth Group' },
+            { symbol: 'XOM', name: 'Exxon Mobil' },
+            { symbol: 'PG', name: 'Procter & Gamble' },
+            { symbol: 'MA', name: 'Mastercard' },
+            { symbol: 'HD', name: 'Home Depot' },
+            { symbol: 'AVGO', name: 'Broadcom Inc.' },
+            { symbol: 'AMD', name: 'AMD Inc.' },
+            { symbol: 'CRM', name: 'Salesforce' },
+            { symbol: 'COST', name: 'Costco' },
+        ];
+
+        const COLORS = ['#00d4ff', '#ff6b6b', '#4ecdc4', '#ffe66d', '#a855f7', '#f97316', '#22c55e', '#ec4899', '#8b5cf6', '#06b6d4', '#eab308', '#6366f1'];
+        const MAX_EQUITIES = 10;
+
+        let selectedEquities = [
+            { symbol: 'SPY', weight: 1 },
+            { symbol: 'QQQ', weight: 1 },
+            { symbol: 'AAPL', weight: 1 },
+            { symbol: 'MSFT', weight: 1 },
+            { symbol: 'NVDA', weight: 1 },
+        ];
+
+        let chart = null;
+        let cachedRealData = {};  // Cache for real stock data
+        let usingRealData = false;
+
+        // Set default end date to today
+        document.getElementById('end-date').value = new Date().toISOString().split('T')[0];
+
+        // Fetch real data from Yahoo Finance
+        async function fetchRealData(symbol, startDate, endDate) {
+            const cacheKey = `${symbol}_${startDate}_${endDate}`;
+            if (cachedRealData[cacheKey]) {
+                return cachedRealData[cacheKey];
+            }
+
+            try {
+                const start = Math.floor(new Date(startDate).getTime() / 1000);
+                const end = Math.floor(new Date(endDate).getTime() / 1000) + 86400;
+
+                // Use a CORS proxy to access Yahoo Finance
+                const url = `https://corsproxy.io/?https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=1d`;
+
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Network response was not ok');
+
+                const data = await response.json();
+                const result = data.chart.result[0];
+                const timestamps = result.timestamp;
+                const closes = result.indicators.quote[0].close;
+
+                const prices = [];
+                for (let i = 0; i < timestamps.length; i++) {
+                    if (closes[i] !== null) {
+                        const date = new Date(timestamps[i] * 1000).toISOString().split('T')[0];
+                        prices.push({ date, price: closes[i] });
+                    }
+                }
+
+                cachedRealData[cacheKey] = prices;
+                return prices;
+            } catch (error) {
+                console.error(`Failed to fetch ${symbol}:`, error);
+                return null;
+            }
+        }
+
+        async function fetchAllRealData(symbols, startDate, endDate) {
+            const results = await Promise.all(
+                symbols.map(sym => fetchRealData(sym, startDate, endDate))
+            );
+
+            // Check if all fetches succeeded
+            if (results.some(r => r === null || r.length === 0)) {
+                return null;
+            }
+
+            // Merge all data by date, normalizing to 0% from start
+            const dateMap = {};
+            const startPrices = {};
+
+            symbols.forEach((sym, idx) => {
+                const prices = results[idx];
+                if (prices.length > 0) {
+                    startPrices[sym] = prices[0].price;
+                }
+                prices.forEach(p => {
+                    if (!dateMap[p.date]) {
+                        dateMap[p.date] = { date: p.date };
+                    }
+                    // Calculate % change from start
+                    const pctChange = ((p.price / startPrices[sym]) - 1) * 100;
+                    dateMap[p.date][sym] = Math.round(pctChange * 100) / 100;
+                });
+            });
+
+            // Convert to sorted array
+            return Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
+        }
+
+        function generateRealisticData(symbols, startDate, endDate) {
+            const data = [];
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+
+            const stockProfiles = {
+                'SPY': { volatility: 0.012, trend: 0.0004 },
+                'QQQ': { volatility: 0.015, trend: 0.0005 },
+                'DIA': { volatility: 0.010, trend: 0.0003 },
+                'IWM': { volatility: 0.016, trend: 0.0003 },
+                'AAPL': { volatility: 0.018, trend: 0.0004 },
+                'MSFT': { volatility: 0.016, trend: 0.0005 },
+                'GOOGL': { volatility: 0.020, trend: 0.0003 },
+                'AMZN': { volatility: 0.022, trend: 0.0004 },
+                'NVDA': { volatility: 0.030, trend: 0.0008 },
+                'META': { volatility: 0.025, trend: 0.0005 },
+                'TSLA': { volatility: 0.035, trend: 0.0002 },
+            };
+
+            const baseValues = {};
+            const startPrices = {};
+            symbols.forEach(sym => {
+                baseValues[sym] = 100;  // Internal tracking
+                startPrices[sym] = 100; // Reference for % calculation
+            });
+
+            let currentDate = new Date(start);
+            let isFirstDay = true;
+            while (currentDate <= end) {
+                if (currentDate.getDay() !== 0 && currentDate.getDay() !== 6) {
+                    const point = { date: currentDate.toISOString().split('T')[0] };
+
+                    if (isFirstDay) {
+                        // First day: all equities start at 0%
+                        symbols.forEach(sym => {
+                            point[sym] = 0;
+                        });
+                        isFirstDay = false;
+                    } else {
+                        // Subsequent days: apply random changes
+                        const marketMove = (Math.random() - 0.5) * 0.01;
+                        symbols.forEach(sym => {
+                            const profile = stockProfiles[sym] || { volatility: 0.018, trend: 0.0003 };
+                            const individualMove = (Math.random() - 0.5) * profile.volatility;
+                            const change = marketMove * 0.5 + individualMove + profile.trend;
+                            baseValues[sym] *= (1 + change);
+                            // Convert to % change from start (0-based)
+                            point[sym] = Math.round((baseValues[sym] / startPrices[sym] - 1) * 10000) / 100;
+                        });
+                    }
+
+                    data.push(point);
+                }
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+            return data;
+        }
+
+        function renderEquities() {
+            const container = document.getElementById('equities-container');
+            container.innerHTML = '';
+
+            const totalParts = selectedEquities.reduce((sum, e) => sum + e.weight, 0);
+
+            selectedEquities.forEach((equity, index) => {
+                const relativeWeight = totalParts > 0 ? ((equity.weight / totalParts) * 100).toFixed(1) : 0;
+                const row = document.createElement('div');
+                row.className = 'equity-row';
+                row.innerHTML = `
+                    <div class="color-dot" style="background:${COLORS[index]};box-shadow:0 0 10px ${COLORS[index]}40"></div>
+                    <select onchange="updateEquity(${index}, this.value)">
+                        ${AVAILABLE_EQUITIES.map(e =>
+                            `<option value="${e.symbol}" ${e.symbol === equity.symbol ? 'selected' : ''}>${e.symbol} - ${e.name}</option>`
+                        ).join('')}
+                    </select>
+                    <input type="number" value="${equity.weight}" min="0" step="any" onchange="updateWeight(${index}, this.value)" title="Proportional weight">
+                    <span style="color:#4ecdc4;font-size:13px;min-width:50px;text-align:right">${relativeWeight}%</span>
+                    ${selectedEquities.length > 1 ? `<button class="remove-btn" onclick="removeEquity(${index})">✕</button>` : ''}
+                `;
+                container.appendChild(row);
+            });
+
+            updateTotalDisplay();
+            document.getElementById('add-btn').style.display = selectedEquities.length >= MAX_EQUITIES ? 'none' : 'inline-block';
+        }
+
+        function updateEquity(index, symbol) {
+            selectedEquities[index].symbol = symbol;
+            updateChart();
+        }
+
+        function updateWeight(index, weight) {
+            selectedEquities[index].weight = parseFloat(weight) || 0;
+            renderEquities();  // Re-render to update calculated percentages
+            updateChart();
+        }
+
+        function addEquity() {
+            if (selectedEquities.length < MAX_EQUITIES) {
+                const usedSymbols = selectedEquities.map(e => e.symbol);
+                const available = AVAILABLE_EQUITIES.find(e => !usedSymbols.includes(e.symbol));
+                if (available) {
+                    selectedEquities.push({ symbol: available.symbol, weight: 1 });
+                    renderEquities();
+                    updateChart();
+                }
+            }
+        }
+
+        function addCustomSymbol() {
+            const input = document.getElementById('custom-symbol');
+            const symbol = input.value.trim().toUpperCase();
+
+            if (!symbol) return;
+
+            if (selectedEquities.length >= MAX_EQUITIES) {
+                alert(`Maximum ${MAX_EQUITIES} equities allowed. Remove one first.`);
+                return;
+            }
+
+            if (selectedEquities.find(e => e.symbol === symbol)) {
+                alert(`${symbol} is already in your list.`);
+                return;
+            }
+
+            // Add to available list if not already there
+            if (!AVAILABLE_EQUITIES.find(e => e.symbol === symbol)) {
+                AVAILABLE_EQUITIES.push({ symbol: symbol, name: symbol });
+            }
+
+            selectedEquities.push({ symbol: symbol, weight: 1 });
+            input.value = '';
+            renderEquities();
+            updateChart();
+        }
+
+        function removeEquity(index) {
+            if (selectedEquities.length > 1) {
+                selectedEquities.splice(index, 1);
+                renderEquities();
+                updateChart();
+            }
+        }
+
+        function equalizeWeights() {
+            const equalWeight = Math.round(100 / selectedEquities.length * 10) / 10;
+            selectedEquities.forEach(e => e.weight = equalWeight);
+            renderEquities();
+            updateChart();
+        }
+
+        function updateTotalDisplay() {
+            const totalParts = selectedEquities.reduce((sum, e) => sum + e.weight, 0);
+            const el = document.getElementById('total-weight');
+            el.textContent = `Proportions auto-scale to 100% ✓`;
+            el.className = 'total-weight total-ok';
+        }
+
+        async function updateChart() {
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+            const showComposite = document.getElementById('show-composite').checked;
+            const symbols = selectedEquities.map(e => e.symbol);
+
+            // Try to fetch real data first
+            let rawData = await fetchAllRealData(symbols, startDate, endDate);
+            const footer = document.getElementById('data-source-footer');
+
+            if (rawData && rawData.length > 0) {
+                usingRealData = true;
+                footer.innerHTML = '✅ Using <strong>real market data</strong> from Yahoo Finance';
+                footer.style.color = '#4ecdc4';
+            } else {
+                usingRealData = false;
+                rawData = generateRealisticData(symbols, startDate, endDate);
+                footer.innerHTML = '⚠️ Using <strong>simulated data</strong> (real data unavailable - check symbol or try again)';
+                footer.style.color = '#ffe66d';
+            }
+
+            document.getElementById('days-count').textContent = `${rawData.length} trading days`;
+
+            // Calculate composite
+            const totalWeight = selectedEquities.reduce((sum, e) => sum + e.weight, 0);
+            const chartData = rawData.map(point => {
+                let compositeValue = 0;
+                selectedEquities.forEach(equity => {
+                    compositeValue += (point[equity.symbol] || 0) * (equity.weight / totalWeight);
+                });
+                return { ...point, Composite: Math.round(compositeValue * 100) / 100 };
+            });
+
+            // Calculate stats (values are already in % format)
+            if (chartData.length > 1) {
+                const last = chartData[chartData.length - 1];
+                const statsContainer = document.getElementById('stats-container');
+                statsContainer.innerHTML = '<label class="label">Period Returns</label><div style="display:flex;flex-wrap:wrap;gap:4px">';
+
+                selectedEquities.forEach((eq, i) => {
+                    const ret = last[eq.symbol].toFixed(2);
+                    const isPositive = parseFloat(ret) >= 0;
+                    statsContainer.innerHTML += `<span class="stat-badge ${isPositive ? 'stat-positive' : 'stat-negative'}" style="border-left:3px solid ${COLORS[i]}">${eq.symbol}: ${isPositive ? '+' : ''}${ret}%</span>`;
+                });
+
+                if (showComposite) {
+                    const compRet = last.Composite.toFixed(2);
+                    const isPositive = parseFloat(compRet) >= 0;
+                    statsContainer.innerHTML += `<span class="stat-badge" style="background:rgba(255,255,255,0.1);color:#fff;border:1px dashed rgba(255,255,255,0.3)">Composite: ${isPositive ? '+' : ''}${compRet}%</span>`;
+                }
+                statsContainer.innerHTML += '</div>';
+            }
+
+            // Prepare datasets
+            const totalParts = selectedEquities.reduce((sum, e) => sum + e.weight, 0);
+            const datasets = selectedEquities.map((equity, index) => {
+                const relativeWeight = totalParts > 0 ? ((equity.weight / totalParts) * 100).toFixed(1) : 0;
+                return {
+                    label: `${equity.symbol} (${relativeWeight}%)`,
+                    data: chartData.map(d => ({ x: d.date, y: d[equity.symbol] })),
+                    borderColor: COLORS[index],
+                    backgroundColor: COLORS[index] + '20',
+                    borderWidth: 2.5,
+                    pointRadius: 0,
+                    pointHoverRadius: 6,
+                    tension: 0.1
+                };
+            });
+
+            if (showComposite) {
+                datasets.push({
+                    label: '📊 Composite',
+                    data: chartData.map(d => ({ x: d.date, y: d.Composite })),
+                    borderColor: '#ffffff',
+                    backgroundColor: 'rgba(255,255,255,0.1)',
+                    borderWidth: 3,
+                    borderDash: [8, 4],
+                    pointRadius: 0,
+                    pointHoverRadius: 7,
+                    tension: 0.1
+                });
+            }
+
+            // Create or update chart
+            const ctx = document.getElementById('chart').getContext('2d');
+
+            if (chart) {
+                chart.destroy();
+            }
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets },
+                plugins: [{
+                    id: 'zeroLine',
+                    beforeDraw: (chart) => {
+                        const ctx = chart.ctx;
+                        const yAxis = chart.scales.y;
+                        const xAxis = chart.scales.x;
+                        const y = yAxis.getPixelForValue(0);
+                        if (y >= yAxis.top && y <= yAxis.bottom) {
+                            ctx.save();
+                            ctx.beginPath();
+                            ctx.moveTo(xAxis.left, y);
+                            ctx.lineTo(xAxis.right, y);
+                            ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                            ctx.lineWidth = 1;
+                            ctx.setLineDash([5, 5]);
+                            ctx.stroke();
+                            ctx.restore();
+                        }
+                    }
+                }],
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#888', padding: 20 }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15,15,26,0.95)',
+                            titleColor: '#fff',
+                            bodyColor: '#ccc',
+                            borderColor: 'rgba(255,255,255,0.15)',
+                            borderWidth: 1,
+                            padding: 12,
+                            displayColors: true
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'week',
+                                displayFormats: { week: 'MMM d' }
+                            },
+                            grid: { color: 'rgba(255,255,255,0.06)' },
+                            ticks: { color: '#666' }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.06)' },
+                            ticks: {
+                                color: '#666',
+                                callback: function(value) { return value + '%'; }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Set chart height
+            document.getElementById('chart').parentElement.style.height = '480px';
+        }
+
+        // Initialize
+        renderEquities();
+        updateChart();  // This is now async
+    </script>
+</body>
+</html>
