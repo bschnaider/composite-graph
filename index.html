@@ -177,9 +177,15 @@
             <div class="card">
                 <h3 class="card-title">📅 Date Range</h3>
                 <label class="label">Start Date</label>
-                <input type="date" id="start-date" value="2026-01-01" onchange="updateChart()">
+                <input type="date" id="start-date" value="2026-01-01" onchange="updateFrequencyDefault(); updateChart()">
                 <label class="label">End Date</label>
-                <input type="date" id="end-date" onchange="updateChart()">
+                <input type="date" id="end-date" onchange="updateFrequencyDefault(); updateChart()">
+                <label class="label" style="margin-top:12px">Frequency <span id="freq-hint" style="color:#4ecdc4;font-weight:normal"></span></label>
+                <select id="frequency" onchange="updateChart()" style="width:100%;margin-bottom:12px">
+                    <option value="1day">Daily</option>
+                    <option value="1week">Weekly</option>
+                    <option value="1month">Monthly</option>
+                </select>
                 <div id="stats-container" class="stats-container"></div>
             </div>
         </div>
@@ -505,6 +511,38 @@
             el.className = 'total-weight total-ok';
         }
 
+        function updateFrequencyDefault() {
+            const startDate = new Date(document.getElementById('start-date').value);
+            const endDate = new Date(document.getElementById('end-date').value);
+
+            if (!startDate || !endDate || startDate >= endDate) {
+                document.getElementById('freq-hint').textContent = '';
+                return;
+            }
+
+            // Calculate days and estimate trading days
+            const days = (endDate - startDate) / (1000 * 60 * 60 * 24);
+            const estimatedTradingDays = Math.ceil(days * 252 / 365);  // ~252 trading days per year
+
+            let optimalFreq = 'daily';
+            let hint = '';
+
+            if (estimatedTradingDays > 100) {
+                if (Math.ceil(estimatedTradingDays / 5) <= 100) {
+                    optimalFreq = 'weekly';
+                    hint = ` (auto: ~${Math.ceil(estimatedTradingDays / 5)} samples)`;
+                } else {
+                    optimalFreq = 'monthly';
+                    hint = ` (auto: ~${Math.ceil(estimatedTradingDays / 21)} samples)`;
+                }
+            } else {
+                hint = ` (auto: ~${estimatedTradingDays} samples)`;
+            }
+
+            document.getElementById('frequency').value = `1${optimalFreq.substring(0, 4)}`;
+            document.getElementById('freq-hint').textContent = hint;
+        }
+
         async function updateChart() {
             const startDate = document.getElementById('start-date').value;
             const endDate = document.getElementById('end-date').value;
@@ -684,6 +722,7 @@
 
         // Initialize
         renderEquities();
+        updateFrequencyDefault();
         updateChart();  // This is now async
     </script>
 </body>
